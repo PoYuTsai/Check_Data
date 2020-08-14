@@ -26,6 +26,7 @@ class CheckData(object):
     def setTargetData(self, path):
         self.TargetDataPath = path
 
+    # 讀取資料，sheet欄位名稱
     def read_data(self):
         try:
             old = self.Old = pd.read_excel(self.SourceDataPath, 'NH_ALL', na_values=['NA'])
@@ -40,9 +41,9 @@ class CheckData(object):
             return 0
 
     def Set_BundleName(self, old, new):
-        old_BundleName_all = self.Old_BundleName_all = set(old['BundleName'])
-        new_BundleName_all = self.New_BundleName_all = set(new['BundleName'])
-        return old_BundleName_all, new_BundleName_all
+        Old_BundleName_all = self.Old_BundleName_all = set(old['BundleName'])
+        New_BundleName_all = self.New_BundleName_all = set(new['BundleName'])
+        return Old_BundleName_all, New_BundleName_all
 
     def dropped_BundleName(self, Old_BundleName_all, New_BundleName_all):
         # 遺失: source data有的資料，但數據庫沒有
@@ -56,16 +57,13 @@ class CheckData(object):
 
     def get_changes(self, old, new):
         all_data = pd.concat([old, new], ignore_index=True)
-        changes = all_data.drop_duplicates(subset=["BundleName", "ChargingService",
-                                                   "Priority", "Bucket",
-                                                   "initialvalue", "ThresholdProfile",
-                                                   "Entity", "Period"], keep='last')
-        # print(changes)
-        return changes
+        Changes = all_data.drop_duplicates(subset=self.output_columns, keep='last')
+        # print(Changes)
+        return Changes
 
-    def changed_BundleName(self, changes):
-        dupe_BundleName = changes[changes['BundleName'].duplicated() == True]['BundleName'].tolist()
-        dupes = changes[changes["BundleName"].isin(dupe_BundleName)]
+    def changed_BundleName(self, Changes):
+        dupe_BundleName = Changes[Changes['BundleName'].duplicated() == True]['BundleName'].tolist()
+        dupes = Changes[Changes["BundleName"].isin(dupe_BundleName)]
         # print(dupes)
 
         change_new = dupes[(dupes["version"] == "new")]
@@ -106,18 +104,18 @@ class CheckData(object):
         # print(df_Removed)
         return df_Removed
 
-    def Increased_BundleName(self, Added_BundleName):
+    def increased_BundleName(self, Added_BundleName):
         # 數據庫有的資料，但Source data沒有
         df_Added = changes[changes["BundleName"].isin(Added_BundleName)]
         # print(df_Added)
         return df_Added
 
-    def save_to_excel(self, Writer, sheet_name, df_modified):
+    def save_to_excel(self, writer, sheet_name, df_modified):
         # 存excel
         output_columns = self.output_columns
         try:
             if not df_modified.empty:
-                df_modified.to_excel(Writer, sheet_name, index=False, columns=output_columns)
+                df_modified.to_excel(writer, sheet_name, index=False, columns=output_columns)
                 writer.save()
                 print('資料不一致')
             else:
@@ -127,7 +125,7 @@ class CheckData(object):
 
 
 # NK測試資料路徑:
-# r'C:\Users\ertsai\Desktop\data_compare\NK_test\NH_DataModel_test.xlsx'
+# r'C:\Users\ertsai\Desktop\data_compare\NK_test\NK_DataModel_test.xlsx'
 # r'C:\Users\ertsai\Desktop\data_compare\NK_test\NK_Aql_Data_test.xlsx'
 
 if __name__ == '__main__':
@@ -147,11 +145,13 @@ if __name__ == '__main__':
     # print(df_removed)
 
     added_BundleName = checkDataTask.added_BundleName(new_BundleName_all, old_BundleName_all)
-    df_added = checkDataTask.Increased_BundleName(added_BundleName)
+    df_added = checkDataTask.increased_BundleName(added_BundleName)
     # print(df_added)
 
     # 輸出的檔案路徑，重跑程式要改檔名or刪掉原本的
-    writer = pd.ExcelWriter(r"C:\Users\ertsai\Desktop\data_compare\NH_test\data-diff.xlsx")
-    checkDataTask.save_to_excel(writer, 'changed', df_changed)
-    checkDataTask.save_to_excel(writer, 'removed', df_removed)
-    checkDataTask.save_to_excel(writer, 'added', df_added)
+    Writer = pd.ExcelWriter(r"C:\Users\ertsai\Desktop\data_compare\NH_test\data-diff.xlsx")
+    checkDataTask.save_to_excel(Writer, 'changed', df_changed)
+    checkDataTask.save_to_excel(Writer, 'removed', df_removed)
+    checkDataTask.save_to_excel(Writer, 'added', df_added)
+
+    sys.exit()
