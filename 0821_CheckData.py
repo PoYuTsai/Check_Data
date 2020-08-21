@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+# Author: PoYuTsai
+# Reference: https://pbpython.com/excel-diff-pandas-update.html
 import pandas as pd
 import sys
 
@@ -17,6 +19,8 @@ class CheckData(object):
                       "Priority", "Bucket",
                       "initialvalue", "ThresholdProfile",
                       "Entity", "Period"]
+    # output_columns = []
+
 
     # 設定基準資料集路徑
     def setSourceData(self, path):
@@ -25,6 +29,7 @@ class CheckData(object):
     # 設定目標資料集路徑
     def setTargetData(self, path):
         self.TargetDataPath = path
+
 
     # 讀取資料，sheet欄位名稱
     def read_data(self):
@@ -40,7 +45,7 @@ class CheckData(object):
             print('Data access exceptions ' + str(e.args[0]))
             return 0
 
-    def Set_BundleName(self, old, new):
+    def set_BundleName(self, old, new):
         Old_BundleName_all = self.Old_BundleName_all = set(old['BundleName'])
         New_BundleName_all = self.New_BundleName_all = set(new['BundleName'])
         return Old_BundleName_all, New_BundleName_all
@@ -54,6 +59,15 @@ class CheckData(object):
         # 新增: 數據庫有的資料，但source data沒有
         Add_BundleName = New_BundleName_all - Old_BundleName_all
         return Add_BundleName
+
+    def getColumnToList(self, df):
+        df_list = self.output_columns
+        # print(df_list)
+        for i in df.columns:
+            # print(i)
+            df_list += [i]
+        # print(df_list)
+        return df_list
 
     def get_changes(self, old, new):
         all_data = pd.concat([old, new], ignore_index=True)
@@ -119,6 +133,11 @@ class CheckData(object):
                 writer.save()
                 print('資料不一致')
             else:
+                OK_data = {'SPS Compare Data': ['OK!!!']}
+                df_OK = pd.DataFrame(OK_data, columns=['SPS Compare Data'])
+                df_OK.to_excel(writer, sheet_name, index=False, columns=['SPS Compare Data'])
+                writer.save()
+                # print(df_OK)
                 print('OK，資料完全一致')
         except KeyError:
             pass
@@ -128,6 +147,7 @@ class CheckData(object):
 # r'C:\Users\ertsai\Desktop\data_compare\NK_test\NK_DataModel_test.xlsx'
 # r'C:\Users\ertsai\Desktop\data_compare\NK_test\NK_Aql_Data_test.xlsx'
 
+
 if __name__ == '__main__':
     checkDataTask = CheckData()
     checkDataTask.setTargetData(r'C:\Users\ertsai\Desktop\data_compare\NH_test\NH_Aql_Data_test.xlsx')
@@ -135,10 +155,13 @@ if __name__ == '__main__':
     readDataResult, readDataResult2 = checkDataTask.read_data()
     # print(readDataResult)
     # print(readDataResult2)
+
     changes = checkDataTask.get_changes(readDataResult, readDataResult2)
+    # print(changes)
+
     df_changed = checkDataTask.changed_BundleName(changes)
     # print(df_changed)
-    old_BundleName_all, new_BundleName_all = checkDataTask.Set_BundleName(readDataResult, readDataResult2)
+    old_BundleName_all, new_BundleName_all = checkDataTask.set_BundleName(readDataResult, readDataResult2)
 
     dropped_BundleName = checkDataTask.dropped_BundleName(old_BundleName_all, new_BundleName_all)
     df_removed = checkDataTask.removed_BundleName(dropped_BundleName)
@@ -150,8 +173,8 @@ if __name__ == '__main__':
 
     # 輸出的檔案路徑，重跑程式要改檔名or刪掉原本的
     Writer = pd.ExcelWriter(r"C:\Users\ertsai\Desktop\data_compare\NH_test\data-diff.xlsx")
-    checkDataTask.save_to_excel(Writer, 'changed', df_changed)
-    checkDataTask.save_to_excel(Writer, 'removed', df_removed)
-    checkDataTask.save_to_excel(Writer, 'added', df_added)
+    checkDataTask.save_to_excel(Writer, 'Abnormal', df_changed)
+    checkDataTask.save_to_excel(Writer, 'Less', df_removed)
+    checkDataTask.save_to_excel(Writer, 'More', df_added)
 
     sys.exit()
