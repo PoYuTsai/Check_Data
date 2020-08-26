@@ -5,8 +5,11 @@
 import pandas as pd
 import sys
 
-
-# 資料欄位:BundleName, ChargingService, Priority, Bucket, initialvalue, ThresholdProfile, Entity, Period
+# 若要比對別的資料需更改:
+# 1.新增欲比對的list欄位內容與更改2個function內的變數，ex: self.output_columns --> self.output_columnsAV
+# 2.欲輸入/輸出的資料路徑
+# 3.欲比對的資料表欄位名稱
+# 4.各function裡面的primary key欄位名稱，ex: Change['BundleName'] --> Change['name']
 
 class CheckData(object):
     SourceDataPath = ''
@@ -15,12 +18,18 @@ class CheckData(object):
     New = ''
     Old_BundleName_all = ''
     New_BundleName_all = ''
-    output_columns = ["BundleName", "ChargingService",
-                      "Priority", "Bucket",
-                      "initialvalue", "ThresholdProfile",
-                      "Entity", "Period"]
-    # output_columns = []
+    Version = ''
 
+    # 4G,5G資費方案
+    output_columns = ['BundleName', 'ChargingService',
+                      'Priority', 'Bucket',
+                      'initialvalue', 'ThresholdProfile',
+                      'Entity', 'Period']
+    # Aggregate View
+    output_columnsAV = ['AVName', 'ChargingServices', 'ThresholdProfileGroup']
+
+    # Notification Template
+    output_columnsNT = ['Notification Profile', 'Channel']
 
     # 設定基準資料集路徑
     def setSourceData(self, path):
@@ -30,20 +39,40 @@ class CheckData(object):
     def setTargetData(self, path):
         self.TargetDataPath = path
 
-
-    # 讀取資料，sheet欄位名稱
-    def read_data(self):
+    # 讀取原始資料，sheet欄位名稱，打version tag
+    def readSourceData(self, sheetName):
         try:
-            old = self.Old = pd.read_excel(self.SourceDataPath, 'NH_ALL', na_values=['NA'])
-            new = self.New = pd.read_excel(self.TargetDataPath, 'NH_ALL', na_values=['NA'])
-            old['version'] = "old"
-            new['version'] = "new"
-            # print(old)
-            # print(new)
-            return old, new
+            version = self.Version = pd.read_excel(self.SourceDataPath, sheetName, na_values=['NA'])
+            version['version'] = "old"
+            # print(version)
+            return version
         except Exception as e:
             print('Data access exceptions ' + str(e.args[0]))
             return 0
+
+    # 讀取目標資料，sheet欄位名稱，打version tag
+    def readTargetData(self, sheetName):
+        try:
+            version = self.Version = pd.read_excel(self.TargetDataPath, sheetName, na_values=['NA'])
+            version['version'] = "new"
+            # print(version)
+            return version
+        except Exception as e:
+            print('Data access exceptions ' + str(e.args[0]))
+            return 0
+
+    # 只有一個欄位要比對的話跑這個function即可
+    def compareTwoDf(self, df1, df2):
+        df1 = df1.drop(['version'], axis=1)
+        df2 = df2.drop(['version'], axis=1)
+        df = pd.concat([df1, df2])
+        df = df.reset_index(drop=True)
+        df_gpby = df.groupby(list(df.columns))
+        # get index of unique records
+        idx_result = [x[0] for x in df_gpby.groups.values() if len(x) == 1]
+        # filter
+        df_save = df.reindex(idx_result)
+        print(df_save)
 
     def set_BundleName(self, old, new):
         Old_BundleName_all = self.Old_BundleName_all = set(old['BundleName'])
@@ -60,15 +89,6 @@ class CheckData(object):
         Add_BundleName = New_BundleName_all - Old_BundleName_all
         return Add_BundleName
 
-    def getColumnToList(self, df):
-        df_list = self.output_columns
-        # print(df_list)
-        for i in df.columns:
-            # print(i)
-            df_list += [i]
-        # print(df_list)
-        return df_list
-
     def get_changes(self, old, new):
         all_data = pd.concat([old, new], ignore_index=True)
         Changes = all_data.drop_duplicates(subset=self.output_columns, keep='last')
@@ -77,7 +97,7 @@ class CheckData(object):
 
     def changed_BundleName(self, Changes):
         dupe_BundleName = Changes[Changes['BundleName'].duplicated() == True]['BundleName'].tolist()
-        dupes = Changes[Changes["BundleName"].isin(dupe_BundleName)]
+        dupes = Changes[Changes['BundleName'].isin(dupe_BundleName)]
         # print(dupes)
 
         change_new = dupes[(dupes["version"] == "new")]
@@ -114,13 +134,13 @@ class CheckData(object):
 
     def removed_BundleName(self, Dropped_BundleName):
         # Source data有的資料，但數據庫沒有
-        df_Removed = changes[changes["BundleName"].isin(Dropped_BundleName)]
+        df_Removed = changes[changes['BundleName'].isin(Dropped_BundleName)]
         # print(df_Removed)
         return df_Removed
 
     def increased_BundleName(self, Added_BundleName):
         # 數據庫有的資料，但Source data沒有
-        df_Added = changes[changes["BundleName"].isin(Added_BundleName)]
+        df_Added = changes[changes['BundleName'].isin(Added_BundleName)]
         # print(df_Added)
         return df_Added
 
@@ -150,11 +170,16 @@ class CheckData(object):
 
 if __name__ == '__main__':
     checkDataTask = CheckData()
-    checkDataTask.setTargetData(r'C:\Users\ertsai\Desktop\data_compare\NH_test\NH_Aql_Data_test.xlsx')
     checkDataTask.setSourceData(r'C:\Users\ertsai\Desktop\data_compare\NH_test\NH_DataModel_test.xlsx')
-    readDataResult, readDataResult2 = checkDataTask.read_data()
+    checkDataTask.setTargetData(r'C:\Users\ertsai\Desktop\data_compare\NH_test\NH_Aql_Data_test.xlsx')
+    readDataResult = checkDataTask.readSourceData('NH_ALL')
+    readDataResult2 = checkDataTask.readTargetData('NH_ALL')
     # print(readDataResult)
     # print(readDataResult2)
+
+    # compare one column values
+    # result = checkDataTask.compareTwoDf(readDataResult, readDataResult2)
+    # print(result)
 
     changes = checkDataTask.get_changes(readDataResult, readDataResult2)
     # print(changes)
